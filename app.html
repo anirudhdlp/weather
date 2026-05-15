@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Weather App</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #e8f4fd;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      width: 360px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      text-align: center;
+      color: #1a6fa8;
+      margin: 0 0 20px;
+    }
+
+    .search-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    input:focus { border-color: #1a6fa8; }
+
+    button {
+      padding: 10px 16px;
+      background: #1a6fa8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button:hover { background: #155d8e; }
+
+    #error {
+      display: none;
+      color: red;
+      font-size: 13px;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    #loader {
+      display: none;
+      text-align: center;
+      color: #888;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    #weather { display: none; }
+
+    .city    { font-size: 22px; font-weight: bold; color: #222; margin-bottom: 2px; }
+    .country { font-size: 13px; color: #888; margin-bottom: 16px; }
+
+    .main-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .temp { font-size: 60px; font-weight: bold; color: #1a6fa8; }
+    .icon { font-size: 48px; }
+    .desc { font-size: 14px; color: #555; text-align: right; margin-top: 4px; }
+
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      background: #f0f7ff;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat       { text-align: center; }
+    .stat-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .stat-value { font-size: 15px; font-weight: bold; color: #333; }
+
+    .forecast-title {
+      font-size: 12px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+
+    .forecast { display: flex; gap: 8px; }
+
+    .fday {
+      flex: 1;
+      background: #f0f7ff;
+      border-radius: 10px;
+      padding: 10px 6px;
+      text-align: center;
+    }
+
+    .fday-name { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .fday-icon { font-size: 20px; margin-bottom: 4px; }
+    .fday-hi   { font-size: 13px; font-weight: bold; color: #333; }
+    .fday-lo   { font-size: 11px; color: #999; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>🌤 Weather App</h2>
+
+  <div class="search-row">
+    <input id="cityInput" type="text" placeholder="Enter city name..."
+           onkeydown="if(event.key==='Enter') getWeather()"/>
+    <button onclick="getWeather()">Search</button>
+  </div>
+
+  <div id="error">City not found. Please try again.</div>
+  <div id="loader">Fetching weather...</div>
+
+  <div id="weather">
+    <div class="city"    id="cityName"></div>
+    <div class="country" id="country"></div>
+
+    <div class="main-row">
+      <div class="temp" id="temp"></div>
+      <div>
+        <div class="icon" id="icon"></div>
+        <div class="desc" id="desc"></div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Feels Like</div>
+        <div class="stat-value" id="feels"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Humidity</div>
+        <div class="stat-value" id="humidity"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Wind</div>
+        <div class="stat-value" id="wind"></div>
+      </div>
+    </div>
+
+    <div class="forecast-title">5-Day Forecast</div>
+    <div class="forecast" id="forecast"></div>
+  </div>
+</div>
+
+<script>
+  const GEO  = 'https://geocoding-api.open-meteo.com/v1/search';
+  const FC   = 'https://api.open-meteo.com/v1/forecast';
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const WMO = {
+    0:'☀️',  1:'🌤️', 2:'⛅',  3:'☁️',
+    45:'🌫️', 48:'🌫️',
+    51:'🌦️', 53:'🌧️', 55:'🌧️',
+    61:'🌦️', 63:'🌧️', 65:'🌧️',
+    71:'🌨️', 73:'❄️',  75:'❄️', 77:'❄️',
+    80:'🌦️', 81:'🌧️', 82:'🌧️',
+    85:'🌨️', 86:'❄️',
+    95:'⛈️', 96:'⛈️', 99:'⛈️'
+  };
+
+  const DESC = {
+    0:'Clear sky',       1:'Mainly clear',    2:'Partly cloudy',  3:'Overcast',
+    45:'Fog',            48:'Icy fog',
+    51:'Light drizzle',  53:'Drizzle',         55:'Heavy drizzle',
+    61:'Light rain',     63:'Rain',            65:'Heavy rain',
+    71:'Light snow',     73:'Snow',            75:'Heavy snow',    77:'Snow grains',
+    80:'Rain showers',   81:'Heavy showers',   82:'Violent showers',
+    85:'Snow showers',   86:'Heavy snow showers',
+    95:'Thunderstorm',   96:'Thunderstorm + hail', 99:'Heavy thunderstorm'
+  };
+
+  function show(id)   { document.getElementById(id).style.display = 'block'; }
+  function hide(id)   { document.getElementById(id).style.display = 'none';  }
+  function set(id, v) { document.getElementById(id).textContent = v; }
+
+  async function getWeather() {
+    const city = document.getElementById('cityInput').value.trim();
+    if (!city) return;
+
+    hide('weather'); hide('error'); show('loader');
+
+    try {
+      // Step 1: city name → coordinates
+      const geoRes  = await fetch(`${GEO}?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+      const geoData = await geoRes.json();
+      if (!geoData.results?.length) throw new Error();
+
+      const { latitude, longitude, name, country } = geoData.results[0];
+
+      // Step 2: coordinates → weather data
+      const params = new URLSearchParams({
+        latitude, longitude,
+        current: 'temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code',
+        daily:   'weather_code,temperature_2m_max,temperature_2m_min',
+        timezone: 'auto',
+        forecast_days: 7
+      });
+
+      const fcRes = await fetch(`${FC}?${params}`);
+      const fc    = await fcRes.json();
+      const cur   = fc.current;
+      const code  = cur.weather_code;
+
+      hide('loader');
+
+      // Fill current weather
+      set('cityName', name);
+      set('country',  country);
+      set('temp',     Math.round(cur.temperature_2m) + '°C');
+      set('feels',    Math.round(cur.apparent_temperature) + '°C');
+      set('humidity', cur.relative_humidity_2m + '%');
+      set('wind',     Math.round(cur.wind_speed_10m) + ' km/h');
+      set('desc',     DESC[code] || 'Unknown');
+      set('icon',     WMO[code]  || '🌡️');
+
+      // Fill 5-day forecast (skip index 0 = today)
+      const el = document.getElementById('forecast');
+      el.innerHTML = '';
+      fc.daily.time.slice(1, 6).forEach((dateStr, i) => {
+        const idx = i + 1;
+        const day = DAYS[new Date(dateStr).getDay()];
+        const d   = document.createElement('div');
+        d.className = 'fday';
+        d.innerHTML = `
+          <div class="fday-name">${day}</div>
+          <div class="fday-icon">${WMO[fc.daily.weather_code[idx]] || '🌡️'}</div>
+          <div class="fday-hi">${Math.round(fc.daily.temperature_2m_max[idx])}°</div>
+          <div class="fday-lo">${Math.round(fc.daily.temperature_2m_min[idx])}°</div>`;
+        el.appendChild(d);
+      });
+
+      show('weather');
+
+    } catch {
+      hide('loader');
+      show('error');
+    }
+  }
+</script>
+
+</body>
+</html>
